@@ -2,7 +2,7 @@ import unittest
 from main import LRUCache
 
 class TestLRUCache(unittest.TestCase):
-    """"
+
     def test_cache_operations(self):
         cache = LRUCache(3)  # Initialize cache with max size 3
 
@@ -42,7 +42,7 @@ class TestLRUCache(unittest.TestCase):
         self.assertEqual(cache.get(2), 'b')  # Key 2 is still in cache
         self.assertEqual(cache.get(3), 'c')  # Key 3 is still in cache
         self.assertEqual(cache.get(4), 'd')  # Key 4 is in cache now
-"""""
+
     def test_cache_replacement_policy(self):
         cache = LRUCache(3)  # Initialize cache with max size 3
 
@@ -56,7 +56,7 @@ class TestLRUCache(unittest.TestCase):
         self.assertEqual(cache.get(1), 'a')  # Key 1 is still in cache
         self.assertEqual(cache.get(3), 'c')  # Key 3 is still in cache
         self.assertEqual(cache.get(4), 'd')  # Key 4 is in cache now
-"""""
+
     def test_cache_edge_cases(self):
         cache = LRUCache(0)  # Initialize cache with max size 0
 
@@ -70,7 +70,7 @@ class TestLRUCache(unittest.TestCase):
         cache.set(2, 'b')  # Adding new key-value pair, should evict key 1
         self.assertIsNone(cache.get(1))  # Key 1 should be evicted
         self.assertEqual(cache.get(2), 'b')  # Key 2 should be in cache
-"""""
+
 
 if __name__ == '__main__':
     unittest.main()

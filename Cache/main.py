@@ -30,9 +30,9 @@ class DLL:
         self.max_size = max_size
 
     def moveNodeToHead(self, node):
-        
+        if node is None:
+            return None
         if self.head == None:
-
             self.head = node
             self.tail = node
         else:
@@ -54,44 +54,43 @@ class DLL:
             nodeToUpdate = self.map[key]
             nodeToUpdate.value = value
             nodeToMoveInHead = nodeToUpdate
-            nodeToUpdate.previous.next = nodeToUpdate.next
-            nodeToUpdate.next = nodeToUpdate.prev
             
         else:
             nodeToMoveInHead = Node(key, value)
-            self.map[key] = nodeToMoveInHead
 
         if nodeToMoveInHead:
-            self.moveNodeToHead(nodeToMoveInHead)
+           self.removeElement(nodeToMoveInHead)
+           self.moveNodeToHead(nodeToMoveInHead)
+        self.map[key] = nodeToMoveInHead
         
         #Capacity and LRU drop
         while len(self.map) > self.max_size:
-            self.removeElementInTail()
+            nodeToDeleteInTail = self.tail
+            self.removeElement(nodeToDeleteInTail)
+            del self.map[nodeToDeleteInTail.key]
+        return nodeToMoveInHead
+            
+
+    def removeElement(self, node):
+        if node is None:
+            return None
+        if self.tail == node and self.tail is not None:
+            self.tail = self.tail.previous
+        if self.head == node and self.head is not None:
+            self.head = self.head.next
+        prev_node = node.previous
+        next_node = node.next
+        if prev_node != None:
+            prev_node.next = next_node
+        if next_node != None:
+            next_node.previous = prev_node
+        return node
 
 
-
-
-    def removeElementInTail(self):
-     
-        if self.tail == None:
-            return
-        
-        if self.tail == self.head:
-            del self.map[self.tail.key]
-            self.tail = self.head = None
-            return
-        
-        del self.map[self.tail.key]
-        tempNode = self.tail.previous
-        tempNode.next= None
-        self.tail.previous = None
-        self.tail = tempNode
-    
-        
 
     def search (self, key):
         if key in self.map:
-            self.moveNodeToHead(self.map[key])
+            self.moveNodeToHead(self.removeElement(self.map[key]))
             return self.map[key].value
         else:
             return None
