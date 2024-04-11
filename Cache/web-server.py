@@ -6,7 +6,7 @@ from kazoo.client import KazooClient
 
 app = Flask(__name__)
 
-zk_hosts = 'localhost:2181'
+zk_hosts = 'zookeeper:2181'
 zk_path = '/distributed-cache/services'
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +20,7 @@ cache = LRUCache(10)
 zk = KazooClient(hosts=zk_hosts)
 zk.start()
 
-@app.route('/register')
+@app.route('/register', methods=['GET'])
 def zk_register():
     service_data = {
         'address': 'localhost',  
@@ -28,7 +28,7 @@ def zk_register():
     }
 
     zk.ensure_path(zk_path)
-    zk.create(zk_path + '/instance', "node"+str(port), ephemeral=True)
+    zk.create(zk_path + '/instance', b"node"+ str(port).encode(), ephemeral=True)
     return 'Registered with zk'
     
 
