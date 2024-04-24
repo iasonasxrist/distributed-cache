@@ -1,2 +1,5 @@
-Flask==3.0.0
-kazoo==2.9.0
+Flask
+gunicorn
+kazoo
+asyncio
+requests

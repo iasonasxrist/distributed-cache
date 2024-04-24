@@ -1,0 +1,20 @@
+version: "3"
+
+services:
+  zookeeper:
+    image: zookeeper:latest
+    ports:
+      - "2181:2181"
+    restart: always
+
+  web:
+    build: "./cache"
+    ports:
+      - "8000"
+    environment:
+      ZOOKEEPER_HOSTS: "zookeeper:2181"
+    depends_on:
+      - zookeeper
+    deploy:
+      replicas: 3
+
