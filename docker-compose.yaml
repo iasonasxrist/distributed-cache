@@ -1,20 +1,21 @@
-version: "3"
+version: '3'
 
 services:
   zookeeper:
-    image: zookeeper:latest
+    image: zookeeper
     ports:
       - "2181:2181"
     restart: always
 
   web:
-    build: "./cache"
+    build:
+      context: .
+      dockerfile: Dockerfile.cacheNode
     ports:
-      - "8000"
+        - "5000"
     environment:
-      ZOOKEEPER_HOSTS: "zookeeper:2181"
+        - ZOOKEEPER_HOST=zookeeper:2181
+    scale: 3
     depends_on:
-      - zookeeper
-    deploy:
-      replicas: 3
+        - zookeeper
 

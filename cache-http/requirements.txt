@@ -1,5 +1,3 @@
 Flask
-gunicorn
 kazoo
-asyncio
 requests
