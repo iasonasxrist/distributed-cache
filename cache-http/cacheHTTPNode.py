@@ -38,7 +38,7 @@ class CacheHTTPNode:
         return self.zkClient.getZNodeData(
             REGISTRATION_ZK_PATH + "/" + self.zkClient.getSortedSubNodes(path = REGISTRATION_ZK_PATH)[0]
         )
-        
+
     def getHostNameOfCacheFollowers(self):
         followerPaths = self.zkClient.getSortedSubNodes(path = REGISTRATION_ZK_PATH)
         #Remove first subNode since it is leader  
@@ -49,6 +49,7 @@ class CacheHTTPNode:
     
     def dumpCacheNodeStatus(self):
         logging.info(f"Leader is {self.getHostNameOfCacheLeader()}")
+
         followers =  self.getHostNameOfCacheFollowers()
         for index, followerHostName in enumerate (followers):
             logging.info(f"Follower {index} with hostname {followerHostName}")
@@ -58,77 +59,93 @@ class CacheHTTPNode:
 
     
     
-    def insert(self, key, value, senderAddress) -> None:
+    def insert(self, key, value, senderAddress):
         if self.amICacheLeader():
-            #I am leader
-            # update local cache
+            # I am the leader
+            # Update local cache
             self.cache.set(key, value)
-            # replicate
+
+            # Replicate data to followers
             followers = self.getHostNameOfCacheFollowers()
             if followers is None:
                 logging.info("No nodes were found to send data.")
                 return None
             
-            addressesOfFollowers = []
-            toSend = {key : value}
+            toSend = {key: value}
 
             for follower in followers:
                 try:
-                    data, _ = self.zkClient.get(follower)
-                    addressesOfFollowers.append(data.decode())
-                except Exception as e:
-                    logging.info(f"Node {follower} didn't have a record in zk.")
-
-            for address in addressesOfFollowers:
-                try:
-                    response = requests.post(address, json=toSend)
+                    data, _ = self.zkClient.getZNodeData(follower)
+                    address = data.decode()  # Convert bytes to string
+                    response = requests.post(f'http://{address}/data', json=toSend)
                     response.raise_for_status()  # Raise an exception for HTTP errors
-                except requests.exceptions.HTTPError as http_err:
-                    logging.info(f'Node {address}: HTTP error occurred: {http_err}')
-                except requests.exceptions.ConnectionError as conn_err:
-                    logging.info(f'Node {address}: Connection error occurred: {conn_err}')
-                except requests.exceptions.Timeout as timeout_err:
-                    logging.info(f'Node {address}: Request timed out: {timeout_err}')
-                except requests.exceptions.RequestException as req_err:
-                    logging.info(f'Node {address}: An error occurred: {req_err}')
+                except Exception as e:
+                    logging.info(f"Error occurred while replicating data to node {follower}: {e}")
         else:
-            # I am a follower
-            # If the leader sent me something I put it in my cache. 
-            # If someone else sent me something I send it to the leader
-        
-            leaderAddress = self.getHostNameOfCacheLeader()
-            address, _ = self.zkClient.get(leaderAddress)
-            #I check the sender address. If sender is not the leader:
 
-            url = leaderAddress + "/data"
-            if senderAddress != leaderAddress:
-                response = requests.post(url, toSend)
+            self.forwardToLeader(key, value)
+         
+    def forwardToLeader(self, key, value):
 
-                if response.status_code != 200:
-                    logging.info("Something may cause unsuccesfull request!")
+        logging.info("*Forwarding Reques to Leader*")
+        leader_address = self.getHostNameOfCacheLeader()
+        logging.info(f"Leader Address: {leader_address}")
 
-            #If sender is leader then I update.
-            self.cache.set(key, value)
-    
-    def get(self, key):
-        pass
-        
-     
+        url = f'http://{leader_address}/data'
+        try:
+            response = requests.post(url, json={key: value})
+            
+            response.raise_for_status() 
+            logging.info(f"Successfully forwarded request to leader at {leader_address}")
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Failed to forward request to leader at {leader_address}: {e}")
+        except Exception as e:
+            logging.error(f"An unexpected error occurred while forwarding request to leader at {leader_address}: {e}")
+
+
+
+    def retrieve(self, key):
+
+        cached_data = self.cache.get(key)
+
+        if cached_data is not None:
+            return cached_data
+
+
+        if self.amICacheLeader():
+            logging.info(f"Data not found locally for key: {key}, and I am the leader")
+            return  {"error": "Data not found"}
             
     
 cacheNode= CacheHTTPNode()    
 
 @app.route('/data', methods=['GET', 'POST'])
-def handle_data(self):
+def handle_data():
     if request.method == 'GET':
         key = request.args.get('key')
         if key is None:
             logging.error('No key was given.')
             return 'No key was given.', 422 
-        cached_data = self.cache.get(key)
-
+        
+        cached_data = cacheNode.retrieve(key)
         logging.info(f'Retrieved data for key: {key}')
         return jsonify(cached_data)
+        
+        # leader_address = self.getHostNameOfCacheLeader()
+
+        # url = f"http://{leader_address}/data?key={key}"
+        # try:
+        #     response = requests.get(url)
+        #     response.raise_for_status()  # Raise an exception for HTTP errors
+        #     data = response.json()
+        #     logging.info(f"Received data from leader for key: {key}")
+        #     return jsonify(data)
+        # except requests.exceptions.RequestException as e:
+        #     logging.error(f"Failed to retrieve data from leader for key: {key}, error: {e}")
+        #     return jsonify({"error": "Failed to retrieve data from leader"})
+
+ 
     
     elif request.method == 'POST':
         key = request.args.get('key')
@@ -139,11 +156,14 @@ def handle_data(self):
             return 'No data given.', 422
 
         senderAddr = request.remote_addr
+        logging.info(f"request Address {senderAddr}")
 
         inserted_data = cacheNode.insert(key, val, senderAddr)
+
         logging.info(f'Data inserted for key: {key}')
         return 'Data inserted successfully.', 201
     else:
+
         logging.error('Internal Server Error.')
         return 'Internal Server Error.', 501
 
