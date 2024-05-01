@@ -1,11 +1,10 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect
 from zookeeper.zookeeperClient import zookeeperClient
 from cache.cache import LRUCache
 import logging
-import time
 import os
-import socket
 import requests
+import atexit
 
 
 
@@ -59,8 +58,9 @@ class CacheHTTPNode:
 
     
     
-    def insert(self, key, value, senderAddress):
+    def insert(self, key, value):
         if self.amICacheLeader():
+            
             # I am the leader
             # Update local cache
             self.cache.set(key, value)
@@ -73,37 +73,27 @@ class CacheHTTPNode:
             
             toSend = {key: value}
 
-            for follower in followers:
+            for follower, hostname in enumerate(followers):
                 try:
-                    data, _ = self.zkClient.getZNodeData(follower)
-                    address = data.decode()  # Convert bytes to string
-                    response = requests.post(f'http://{address}/data', json=toSend)
+                    response = requests.post(f'http://{hostname}:5000/data?key={key}&value={value}')
                     response.raise_for_status()  # Raise an exception for HTTP errors
                 except Exception as e:
-                    logging.info(f"Error occurred while replicating data to node {follower}: {e}")
+                    logging.error(f"Error occurred while replicating data to node {follower}: {e}")
         else:
 
-            self.forwardToLeader(key, value)
+            self.redirectToLeader(key, value)
          
-    def forwardToLeader(self, key, value):
+    def redirectToLeader(self, key, value):
 
         logging.info("*Forwarding Reques to Leader*")
         leader_address = self.getHostNameOfCacheLeader()
         logging.info(f"Leader Address: {leader_address}")
 
-        url = f'http://{leader_address}/data'
-        try:
-            response = requests.post(url, json={key: value})
+        url = f'http://{leader_address}:5000/leader_redirection?key={key}&value={value}'
+        
+
+        return redirect(url, code = 302)
             
-            response.raise_for_status() 
-            logging.info(f"Successfully forwarded request to leader at {leader_address}")
-
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to forward request to leader at {leader_address}: {e}")
-        except Exception as e:
-            logging.error(f"An unexpected error occurred while forwarding request to leader at {leader_address}: {e}")
-
-
 
     def retrieve(self, key):
 
@@ -119,6 +109,24 @@ class CacheHTTPNode:
             
     
 cacheNode= CacheHTTPNode()    
+
+@app.route("/leader_redirection")
+def handle_redirection():
+        
+    key = request.args.get('key')
+    value = request.args.get('value')
+    
+    if not (key and value):
+        logging.error('No data given.')
+        return 'No data given.', 422
+
+    inserted_data = cacheNode.insert(key, value)
+
+    logging.info(f'Data inserted for key: {key}')
+    logging.info(f"Successfully forwarded request to leader")
+    return 'Data inserted successfully.', 201
+
+
 
 @app.route('/data', methods=['GET', 'POST'])
 def handle_data():
@@ -149,16 +157,13 @@ def handle_data():
     
     elif request.method == 'POST':
         key = request.args.get('key')
-        val = request.args.get('val')
+        value = request.args.get('value')
         
-        if not (key and val):
+        if not (key and value):
             logging.error('No data given.')
             return 'No data given.', 422
 
-        senderAddr = request.remote_addr
-        logging.info(f"request Address {senderAddr}")
-
-        inserted_data = cacheNode.insert(key, val, senderAddr)
+        inserted_data = cacheNode.insert(key, value)
 
         logging.info(f'Data inserted for key: {key}')
         return 'Data inserted successfully.', 201
@@ -170,3 +175,6 @@ def handle_data():
     
 if __name__ == '__main__':
     cacheNode.start()
+
+    cacheNode.zkClient.clear_ephemeral_nodes()
+

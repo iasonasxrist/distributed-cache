@@ -5,7 +5,7 @@ from kazoo.client import KazooState
 import time 
 import logging
 import os
-import atexit
+
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,7 +19,7 @@ class zookeeperClient:
             self.start_with_retries()
             self.startConnectionListener()
             self.clientConnented = True
-            atexit.register(self.clear_ephemeral_nodes)
+            
         except:
             raise Exception("Zookeeper client failed to be started")
             
@@ -84,6 +84,7 @@ class zookeeperClient:
             try:
                 # For example:
                 self.zkClient.delete("/registeredCacheNodes", recursive=True)
+                logging.info(f"Znodes deleted successfully.")
             except Exception as e:
                 print(f"Failed to clear ephemeral nodes: {e}")
     
