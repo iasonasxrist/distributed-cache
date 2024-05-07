@@ -12,7 +12,7 @@ services:
       context: .
       dockerfile: Dockerfile.cacheNode
     ports:
-        - "5000"
+      - "5001-5003:5000"
     environment:
         - ZOOKEEPER_HOST=zookeeper:2181
     scale: 3

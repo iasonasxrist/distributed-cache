@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from cache import CacheHTTPNode
+from cacheHTTPNode import CacheHTTPNode
+# from zookeeper.zookeeperClient import zookeeperClient
+
 
 class TestCacheHTTPNode(unittest.TestCase):
     def setUp(self):
@@ -11,7 +13,7 @@ class TestCacheHTTPNode(unittest.TestCase):
         self.cache_node.amICacheLeader = MagicMock(return_value=True)
 
         # Testing insertion when the node is the leader
-        key = 'test_key'
+        key = '13'
         value = 'test_value'
         self.cache_node.insert(key, value)
 
@@ -24,7 +26,7 @@ class TestCacheHTTPNode(unittest.TestCase):
         self.cache_node.amICacheLeader = MagicMock(return_value=False)
 
         # Testing insertion redirection when the node is not the leader
-        key = 'test_key'
+        key = '13'
         value = 'test_value'
         self.cache_node.insert(key, value)
 
@@ -32,7 +34,7 @@ class TestCacheHTTPNode(unittest.TestCase):
         mock_redirect.assert_called_once_with(key, value)
 
     def test_retrieve(self):
-        key = 'test_key'
+        key = '13'
         value = 'test_value'
 
         # Insert a value into the cache
