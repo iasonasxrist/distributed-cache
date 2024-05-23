@@ -54,79 +54,26 @@ class CacheHTTPNode:
             logging.info(f"Follower {index} with hostname {followerHostName}")
             
     def amICacheLeader(self) -> bool:
-        return self.getHostNameOfCacheLeader() == HOSTNAME;
+        return self.getHostNameOfCacheLeader() == HOSTNAME
 
-    
-    
     def insert(self, key, value):
-        if self.amICacheLeader():
-            
-            # I am the leader
-            # Update local cache
-            self.cache.set(key, value)
 
-            # Replicate data to followers
-            followers = self.getHostNameOfCacheFollowers()
-            if followers is None:
-                logging.info("No nodes were found to send data.")
-                return None
-            
-            toSend = {key: value}
+        self.cache.set(key, value)
+        # Replicate data to followers
+        followers = self.getHostNameOfCacheFollowers()
 
-            for follower, hostname in enumerate(followers):
-                try:
-                    response = requests.post(f'http://{hostname}:5000/data?key={key}&value={value}')
-                    response.raise_for_status()  # Raise an exception for HTTP errors
-                except Exception as e:
-                    logging.error(f"Error occurred while replicating data to node {follower}: {e}")
-        else:
-
-            self.redirectToLeader(key, value)
-         
-    def redirectToLeader(self, key, value):
-
-        logging.info("*Forwarding Reques to Leader*")
-        leader_address = self.getHostNameOfCacheLeader()
-        logging.info(f"Leader Address: {leader_address}")
-
-        url = f'http://{leader_address}:5000/leader_redirection?key={key}&value={value}'
-        
-
-        return redirect(url, code = 302)
-            
-
+        for follower, hostname in enumerate(followers):
+                response = requests.post(f'http://{hostname}:5000/data?key={key}&value={value}')
+                response.raise_for_status()  # Raise an exception for HTTP errors
+ 
     def retrieve(self, key):
 
         cached_data = self.cache.get(key)
-
         if cached_data is not None:
             return cached_data
-
-
-        if self.amICacheLeader():
-            logging.info(f"Data not found locally for key: {key}, and I am the leader")
-            return  {"error": "Data not found"}
-            
+        return {}
     
-cacheNode= CacheHTTPNode()    
-
-@app.route("/leader_redirection")
-def handle_redirection():
-        
-    key = request.args.get('key')
-    value = request.args.get('value')
-    
-    if not (key and value):
-        logging.error('No data given.')
-        return 'No data given.', 422
-
-    inserted_data = cacheNode.insert(key, value)
-
-    logging.info(f'Data inserted for key: {key}')
-    logging.info(f"Successfully forwarded request to leader")
-    return 'Data inserted successfully.', 201
-
-
+cacheNode = CacheHTTPNode()    
 
 @app.route('/data', methods=['GET', 'POST'])
 def handle_data():
@@ -140,22 +87,8 @@ def handle_data():
         logging.info(f'Retrieved data for key: {key}')
         return jsonify(cached_data)
         
-        # leader_address = self.getHostNameOfCacheLeader()
-
-        # url = f"http://{leader_address}/data?key={key}"
-        # try:
-        #     response = requests.get(url)
-        #     response.raise_for_status()  # Raise an exception for HTTP errors
-        #     data = response.json()
-        #     logging.info(f"Received data from leader for key: {key}")
-        #     return jsonify(data)
-        # except requests.exceptions.RequestException as e:
-        #     logging.error(f"Failed to retrieve data from leader for key: {key}, error: {e}")
-        #     return jsonify({"error": "Failed to retrieve data from leader"})
-
- 
-    
     elif request.method == 'POST':
+        
         key = request.args.get('key')
         value = request.args.get('value')
         
@@ -163,18 +96,20 @@ def handle_data():
             logging.error('No data given.')
             return 'No data given.', 422
 
-        inserted_data = cacheNode.insert(key, value)
-
-        logging.info(f'Data inserted for key: {key}')
-        return 'Data inserted successfully.', 201
+        if cacheNode.amICacheLeader():
+            try:
+                cacheNode.insert(key, value)
+            except:
+                return 'Failed to insert data', 501
+        
+        else:
+            leader_hostname = cacheNode.getHostNameOfCacheLeader()
+            return redirect(f'http://{leader_hostname}:5000/leader_redirection?key={key}&value={value}')
+        
     else:
-
-        logging.error('Internal Server Error.')
         return 'Internal Server Error.', 501
 
     
 if __name__ == '__main__':
     cacheNode.start()
-
-    cacheNode.zkClient.clear_ephemeral_nodes()
 
