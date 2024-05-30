@@ -62,11 +62,13 @@ def handle_data():
             return 'No key was given.', 422 
         
         cached_data = cacheNode.retrieve(key)
+        if cached_data is None:
+            logging.error(f'No data found for key: {key}')
+            return 'No data found for the given key.', 404
         logging.info(f'Retrieved data for key: {key}')
         return jsonify(cached_data)
         
     elif request.method == 'POST':
-        
         key = request.args.get('key')
         value = request.args.get('value')
         
@@ -77,19 +79,22 @@ def handle_data():
         if cacheNode.amICacheLeader():
             try:
                 cacheNode.insert(key, value)
-            except:
+                logging.info(f'Data inserted for key: {key}')
+                return 'Data inserted successfully.', 201
+            except Exception as e:
+                logging.error(f'Failed to insert data: {e}')
                 return 'Failed to insert data', 501
         
         else:
-            leader_hostname = cacheNode.zkClient.getHostNameOfCacheLeader(REGISTRATION_ZK_PATH)
-            logging.info(f"leader hostname {leader_hostname}")
-            return redirect(f'http://{leader_hostname}:5000/data?key={key}&value={value}')
+            try:
+                leader_hostname = cacheNode.zkClient.getHostNameOfCacheLeader(REGISTRATION_ZK_PATH)
+                logging.info(f'Leader hostname: {leader_hostname}')
+                return redirect(f'http://{leader_hostname}:5000/data?key={key}&value={value}')
+            except Exception as e:
+                logging.error(f'Error finding leader hostname: {e}')
+                return 'Failed to find leader hostname.', 500
         
-    else:
-        logging.error('Unsupported HTTP method.')
-        return 'Internal Server Error.', 501
-
-    
+    return 'Internal Server Error.', 500
 if __name__ == '__main__':
     cacheNode.start()
 
