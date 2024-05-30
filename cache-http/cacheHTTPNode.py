@@ -4,7 +4,6 @@ from cache.cache import LRUCache
 import logging
 import os
 import requests
-import atexit
 
 
 
@@ -24,43 +23,22 @@ class CacheHTTPNode:
     def start(self):
         logging.info(f"Starting cache node with HOSTNAME {HOSTNAME}")
         #Node is eligible to be leader of follower according to the sequence number of znode
-        self.registerCacheNode()
-        self.dumpCacheNodeStatus()
+        self.zkClient.registerCacheNode(REGISTRATION_ZK_PATH, HOSTNAME)
+        self.zkClient.dumpCacheNodeStatus(REGISTRATION_ZK_PATH)
         #Init HTTP server
         app.run(host='0.0.0.0', port=5000)
         logging.info("Server is up and running")
 
-    def registerCacheNode(self):
-        return self.zkClient.registerSequentialZNode(path = REGISTRATION_ZK_PATH+  '/node_', data = HOSTNAME)
-        
-    def getHostNameOfCacheLeader(self):
-        return self.zkClient.getZNodeData(
-            REGISTRATION_ZK_PATH + "/" + self.zkClient.getSortedSubNodes(path = REGISTRATION_ZK_PATH)[0]
-        )
 
-    def getHostNameOfCacheFollowers(self):
-        followerPaths = self.zkClient.getSortedSubNodes(path = REGISTRATION_ZK_PATH)
-        #Remove first subNode since it is leader  
-        if len(followerPaths) > 1:
-            followerPaths = followerPaths[1:]
-        followersList = [self.zkClient.getZNodeData(REGISTRATION_ZK_PATH + "/" + followerPath) for followerPath in followerPaths]
-        return followersList
-    
-    def dumpCacheNodeStatus(self):
-        logging.info(f"Leader is {self.getHostNameOfCacheLeader()}")
-
-        followers =  self.getHostNameOfCacheFollowers()
-        for index, followerHostName in enumerate (followers):
-            logging.info(f"Follower {index} with hostname {followerHostName}")
             
     def amICacheLeader(self) -> bool:
-        return self.getHostNameOfCacheLeader() == HOSTNAME
+        return self.zkClient.getHostNameOfCacheLeader(REGISTRATION_ZK_PATH) == HOSTNAME
 
     def insert(self, key, value):
 
         self.cache.set(key, value)
         # Replicate data to followers
-        followers = self.getHostNameOfCacheFollowers()
+        followers = self.zkClient.getHostNameOfCacheFollowers(REGISTRATION_ZK_PATH)
 
         for follower, hostname in enumerate(followers):
                 response = requests.post(f'http://{hostname}:5000/data?key={key}&value={value}')
@@ -103,10 +81,12 @@ def handle_data():
                 return 'Failed to insert data', 501
         
         else:
-            leader_hostname = cacheNode.getHostNameOfCacheLeader()
-            return redirect(f'http://{leader_hostname}:5000/leader_redirection?key={key}&value={value}')
+            leader_hostname = cacheNode.zkClient.getHostNameOfCacheLeader(REGISTRATION_ZK_PATH)
+            logging.info(f"leader hostname {leader_hostname}")
+            return redirect(f'http://{leader_hostname}:5000/data?key={key}&value={value}')
         
     else:
+        logging.error('Unsupported HTTP method.')
         return 'Internal Server Error.', 501
 
     
