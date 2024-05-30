@@ -37,12 +37,14 @@ class CacheHTTPNode:
     def insert(self, key, value):
 
         self.cache.set(key, value)
-        # Replicate data to followers
-        followers = self.zkClient.getHostNameOfCacheFollowers(REGISTRATION_ZK_PATH)
+        if cacheNode.amICacheLeader():
+            # Replicate data to followers
+            followers = self.zkClient.getHostNameOfCacheFollowers(REGISTRATION_ZK_PATH)
 
-        for follower, hostname in enumerate(followers):
-                response = requests.post(f'http://{hostname}:5000/data?key={key}&value={value}')
-                response.raise_for_status()  # Raise an exception for HTTP errors
+            logging.info("&&&&&&&&&&&&&&Update Followers********")
+            for follower, hostname in enumerate(followers):
+                    response = requests.post(f'http://{hostname}:5000/data?key={key}&value={value}')
+                    response.raise_for_status()  # Raise an exception for HTTP errors
  
     def retrieve(self, key):
 
@@ -75,25 +77,14 @@ def handle_data():
         if not (key and value):
             logging.error('No data given.')
             return 'No data given.', 422
+       
+        try:
+            cacheNode.insert(key, value)
+            logging.info(f'Data inserted for key: {key}')
+            return 'Data inserted successfully.', 201
+        except Exception as e:
+            logging.error(f'Failed to insert data: {e}')
 
-        if cacheNode.amICacheLeader():
-            try:
-                cacheNode.insert(key, value)
-                logging.info(f'Data inserted for key: {key}')
-                return 'Data inserted successfully.', 201
-            except Exception as e:
-                logging.error(f'Failed to insert data: {e}')
-                return 'Failed to insert data', 501
-        
-        else:
-            try:
-                leader_hostname = cacheNode.zkClient.getHostNameOfCacheLeader(REGISTRATION_ZK_PATH)
-                logging.info(f'Leader hostname: {leader_hostname}')
-                return redirect(f'http://{leader_hostname}:5000/data?key={key}&value={value}')
-            except Exception as e:
-                logging.error(f'Error finding leader hostname: {e}')
-                return 'Failed to find leader hostname.', 500
-        
     return 'Internal Server Error.', 500
 if __name__ == '__main__':
     cacheNode.start()
