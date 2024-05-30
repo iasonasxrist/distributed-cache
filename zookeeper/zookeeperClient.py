@@ -74,17 +74,26 @@ class zookeeperClient:
         else:
             raise Exception (f"Path : {path} does not exist")
         
-        
-    def clear_ephemeral_nodes(self):
-        """
-        Delete ephimeral nodes when service exits
-        """
-        if self.clientConnented:
-            
-            try:
-                # For example:
-                self.zkClient.delete("/registeredCacheNodes", recursive=True)
-                logging.info(f"Znodes deleted successfully.")
-            except Exception as e:
-                print(f"Failed to clear ephemeral nodes: {e}")
+    def dumpCacheNodeStatus(self, path):
+        logging.info(f"Leader is {self.getHostNameOfCacheLeader(path)}")
+
+        followers =  self.getHostNameOfCacheFollowers(path)
+        for index, followerHostName in enumerate (followers):
+            logging.info(f"Follower {index} with hostname {followerHostName}")
     
+        
+    def getHostNameOfCacheLeader(self,path):
+        return self.getZNodeData(
+            path + "/" + self.getSortedSubNodes(path = path)[0]
+        )
+
+    def getHostNameOfCacheFollowers(self, path:str):
+        followerPaths = self.getSortedSubNodes(path=path)
+        #Remove first subNode since it is leader  
+        if len(followerPaths) > 1:
+            followerPaths = followerPaths[1:]
+        followersList = [self.getZNodeData(path + "/" + followerPath) for followerPath in followerPaths]
+        return followersList
+    
+    def registerCacheNode(self, path, hostname):
+        return self.registerSequentialZNode(path = path+  '/node_', data = hostname)
