@@ -88,7 +88,7 @@ class zookeeperClient:
         )
 
     def getHostNameOfAllNodes(self,path):
-        return self.getZNodeData(path + "/" + self.getSortedSubNodes(path = path))
+        return self.getZNodeData(path + "/" + self.getSortedSubNodes(path = path)[:])
 
     def getHostNameOfCacheFollowers(self, path:str):
         followerPaths = self.getSortedSubNodes(path=path)
@@ -101,16 +101,3 @@ class zookeeperClient:
     def registerCacheNode(self, path, hostname):
         return self.registerSequentialZNode(path = path+  '/node_', data = hostname)
     
-
-    def clear_ephemeral_nodes(self):
-        """
-        Delete ephimeral nodes when service exits
-        """
-        if self.clientConnented:
-            
-            try:
-                # For example:
-                self.zkClient.delete("/registeredCacheNodes", recursive=True)
-                logging.info(f"Znodes deleted successfully.")
-            except Exception as e:
-                print(f"Failed to clear ephemeral nodes: {e}")

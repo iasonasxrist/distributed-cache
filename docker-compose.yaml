@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 services:
   zookeeper:
@@ -11,11 +11,25 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.cacheNode
-    ports:
-      - "5001-5003:5000"
+    expose:
+      - "5000"
     environment:
-        - ZOOKEEPER_HOST=zookeeper:2181
+      - ZOOKEEPER_HOST=zookeeper:2181
     scale: 3
     depends_on:
-        - zookeeper
+      - zookeeper
 
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.cacheGateway
+    ports:
+      - "5005:5005"
+    environment:
+      - GATEWAY_PORT=5005
+      - ZOOKEEPER_HOST=zookeeper:2181
+      - HOSTNAME=localhost
+    # scale: 2
+    depends_on:
+      # - zookeeper
+      - web

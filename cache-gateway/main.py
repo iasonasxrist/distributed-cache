@@ -37,7 +37,8 @@ class CacheGateway:
 
     def accessToIpList(self)->list:
 
-        ips = self.zkClient.getHostNameOfAllNodes(REGISTRATION_ZK_PATH)
+        # ips = self.zkClient.getHostNameOfAllNodes(REGISTRATION_ZK_PATH)
+        ips = self.zkClient.getHostNameOfCacheFollowers(REGISTRATION_ZK_PATH)
 
         self.circular = CircularLinkedList()
         for ip in ips:
