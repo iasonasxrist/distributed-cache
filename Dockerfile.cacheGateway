@@ -1,0 +1,13 @@
+# First stage: Build the Python environment and install dependencies
+FROM python:3.9-slim AS builder
+
+WORKDIR /app
+
+# Copy requirements file
+COPY ./cache-gateway/requirements.txt .
+COPY ./cache-gateway/CircularLinkedList.py .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . /app
+
+CMD ["python", "-m", "cache-gateway.main"]

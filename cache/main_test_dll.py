@@ -1,5 +1,5 @@
 import unittest
-from main import DLL
+from cache import DLL
 
 class TestDLL(unittest.TestCase):
 

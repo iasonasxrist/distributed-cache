@@ -13,7 +13,6 @@ class LRUCache:
     def set(self, key, value):
         self.DLL.insert(key, value)
         
-
 class Node:
     def __init__(self, key, value):
         self.value = value
@@ -70,7 +69,6 @@ class DLL:
             del self.map[nodeToDeleteInTail.key]
         return nodeToMoveInHead
             
-
     def removeElement(self, node):
         if node is None:
             return None
@@ -86,23 +84,9 @@ class DLL:
             next_node.previous = prev_node
         return node
 
-
-
     def search (self, key):
         if key in self.map:
             self.moveNodeToHead(self.removeElement(self.map[key]))
             return self.map[key].value
         else:
-            return None
-        
-
-
-
-        
-
-
-        
-        
-        
-        
-        
+            return None    
