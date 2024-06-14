@@ -7,7 +7,6 @@ import logging
 import os
 
 
-
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class zookeeperClient:
@@ -22,7 +21,10 @@ class zookeeperClient:
             
         except:
             raise Exception("Zookeeper client failed to be started")
-            
+    
+    def getObjectOfWatchers(self):
+        return self.zkClient
+    
     def startConnectionListener(self):
         @self.zkClient.add_listener
         def connectionListener(state):
@@ -35,14 +37,12 @@ class zookeeperClient:
             else:
                 logging.info("Connected to ZooKeeper")
                 self.clientConnented = True
-
-            
         
     def start_with_retries(self, max_retries=15, retry_delay=10):
         for i in range(max_retries):
             try:
                 self.zkClient.start()
-                break  # Exit loop if ZooKeeper connection is successful
+                break
             except Exception as e:
                 if i < max_retries - 1:
                     time.sleep(retry_delay)
@@ -81,19 +81,25 @@ class zookeeperClient:
         for index, followerHostName in enumerate (followers):
             logging.info(f"Follower {index} with hostname {followerHostName}")
     
-        
     def getHostNameOfCacheLeader(self, path):
         return self.getZNodeData(
             path + "/" + self.getSortedSubNodes(path = path)[0]
         )
 
-    def getHostNameOfAllNodes(self,path):
-        return self.getZNodeData(path + "/" + self.getSortedSubNodes(path = path)[:])
+    def getHostNameOfAllNodes(self, path:str):
+            followerPaths = self.getSortedSubNodes(path=path)
+            followersList = [self.getZNodeData(path + "/" + followerPath) for followerPath in followerPaths]
+            return followersList
 
+    def getHostNameOfAllNodes(self, path, zookeeperChildren):
+        followerPaths = sorted(zookeeperChildren)
+        followersList = [self.getZNodeData(path + "/" + followerPath) for followerPath in followerPaths]
+        return followersList
+    
     def getHostNameOfCacheFollowers(self, path:str):
         followerPaths = self.getSortedSubNodes(path=path)
         #Remove first subNode since it is leader  
-        if len(followerPaths) > 1:
+        if len(followerPaths) >=1:
             followerPaths = followerPaths[1:]
         followersList = [self.getZNodeData(path + "/" + followerPath) for followerPath in followerPaths]
         return followersList
