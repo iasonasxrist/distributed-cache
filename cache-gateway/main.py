@@ -4,6 +4,7 @@ from cache.cache import LRUCache
 import logging
 import os
 import requests
+import time
 from CircularLinkedList import CircularLinkedList
 
 
@@ -19,7 +20,6 @@ GATEWAY_PORT = os.getenv('GATEWAY_PORT')
 class CacheGateway:
     def __init__(self) -> None:
         self.zkClient = zookeeperClient(hosts = ZOOKEEPER_HOST)
-        self.current = 0
 
     def start(self):
         logging.info(f"Starting cache node with HOSTNAME {HOSTNAME}")
@@ -34,52 +34,81 @@ class CacheGateway:
         app.run(host='0.0.0.0', port=GATEWAY_PORT)
         logging.info("Server is up and running")
 
-
     def accessToIpList(self)->list:
+        kazoo = self.zkClient.getObjectOfWatchers()
+        
+        @kazoo.ChildrenWatch(REGISTRATION_ZK_PATH)
+        def watch_children(children):
+            logging.warning("Children are now: %s" % children)
+            hostnames = self.zkClient.getHostNameOfAllNodes(REGISTRATION_ZK_PATH, children)
+            self.circular = CircularLinkedList()
+            [self.circular.append(hostname) for hostname in hostnames]
 
-        # ips = self.zkClient.getHostNameOfAllNodes(REGISTRATION_ZK_PATH)
-        ips = self.zkClient.getHostNameOfCacheFollowers(REGISTRATION_ZK_PATH)
-
-        self.circular = CircularLinkedList()
-        for ip in ips:
-            self.circular.append(ip)
-
-    def getNextNode(self):
-
-        if self.current == 0:
-            self.current = self.circular.first_node()
-
-        nextNode = self.circular.get_next_node(self.current)
-        logging.debug(f"********new node {nextNode.data} and current {self.current.data}")
-        self.current = nextNode
-        return nextNode.data
    
 cacheGateway = CacheGateway()
 
+def getRequestRec(key,retries=0, max_retries=5):
 
+    nextHostname = cacheGateway.circular.getNext()
+    if nextHostname is None:
+        return 'All servers are gone.', 503
+
+    if retries >= max_retries:
+        return "Max attempts reached!", 503
+    
+    try:
+        # Forward the request to the next node
+        response = requests.get(f'http://{nextHostname}:5000/data?key={key}')
+        response.raise_for_status()
+        cached_data = response.json()
+        logging.info(f'Retrieved data for key: {key} from {nextHostname}')
+        return jsonify(cached_data)
+    
+    except requests.exceptions.RequestException as e:
+        logging.error(f'Error forwarding request to {nextHostname}: {e}')
+        return getRequestRec(key, retries=retries+1, max_retries=max_retries)
+
+
+
+def LeaderTimeOutSwitch(key, value, retries=0, max_retries=5):
+    base_wait_time=2
+
+    while retries < max_retries:
+        try:
+                    
+            leader_hostname = cacheGateway.zkClient.getHostNameOfCacheLeader(path=REGISTRATION_ZK_PATH)
+            logging.info(f'Forwarded data to leader {leader_hostname}')
+            response = requests.post(f'http://{leader_hostname}:5000/data?key={key}&value={value}')
+            response.raise_for_status()
+            return "OK", 200
+
+        except requests.exceptions.Timeout:
+            logging.error('Timeout error when connecting to leader.408')
+        except requests.exceptions.ConnectionError:
+           
+            logging.error('Connection error when connecting to leader. 599')
+        except requests.exceptions.HTTPError as err:
+            if err.response.status_code == 503:
+                logging.error('503 Service Unavailable from leader.')
+                return "503 Service Unavailable", 503
+
+        retries += 1
+        wait_time = base_wait_time * (2 ** retries)
+        logging.info(f'Waiting for {wait_time} seconds before retrying...')
+        time.sleep(wait_time)
+
+    logging.error('Max attempts reached! Failed to connect to leader.')
+    return "Max attempts reached!", 503
+        
 @app.route('/data', methods=['GET', 'POST'])
 def handle_data():
     if request.method == 'GET':
-
-        next_ip = cacheGateway.getNextNode()
-
-        logging.info(f"Ip Receiver is {next_ip}")
         key = request.args.get('key')
         if key is None:
             logging.error('No key was given.')
             return 'No key was given.', 422 
-                
-        try:
-            # Forward the request to the next node
-            response = requests.get(f'http://{next_ip}:5000/data?key={key}')
-            response.raise_for_status()
-            cached_data = response.json()
-            logging.info(f'Retrieved data for key: {key} from {next_ip}')
-            return jsonify(cached_data)
-        
-        except requests.exceptions.RequestException as e:
-            logging.error(f'Error forwarding request to {next_ip}: {e}')
-            return 'Error retrieving data from node.', 500
+
+        return getRequestRec(key)
 
     elif request.method == 'POST':
         
@@ -90,16 +119,10 @@ def handle_data():
             logging.error('No data given.')
             return 'No data given.', 422
         
-        else:
+        else:     
+          
+          return LeaderTimeOutSwitch(key, value)
 
-            leader_hostname = cacheGateway.zkClient.getHostNameOfCacheLeader(path=REGISTRATION_ZK_PATH)
-            response = requests.post(f'http://{leader_hostname}:5000/data?key={key}&value={value}')
-            
-            logging.info(f'Forwared data to leader {leader_hostname}')
-            return "Successful sent ", 200
-
-
-        
     else:
         return 'Internal Server Error.', 501
 
