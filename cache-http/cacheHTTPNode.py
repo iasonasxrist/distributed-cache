@@ -6,7 +6,6 @@ import os
 import requests
 
 
-
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 # HOST is provided by docker and refers to the hostname of the container
@@ -22,14 +21,11 @@ class CacheHTTPNode:
     
     def start(self):
         logging.info(f"Starting cache node with HOSTNAME {HOSTNAME}")
-        #Node is eligible to be leader of follower according to the sequence number of znode
+        #Node is eligible to be leader or follower according to the sequence number of znode
         self.zkClient.registerCacheNode(REGISTRATION_ZK_PATH, HOSTNAME)
         self.zkClient.dumpCacheNodeStatus(REGISTRATION_ZK_PATH)
-        #Init HTTP server
         app.run(host='0.0.0.0', port=5000)
         logging.info("Server is up and running")
-
-
             
     def amICacheLeader(self) -> bool:
         return self.zkClient.getHostNameOfCacheLeader(REGISTRATION_ZK_PATH) == HOSTNAME
@@ -38,13 +34,12 @@ class CacheHTTPNode:
 
         self.cache.set(key, value)
         if cacheNode.amICacheLeader():
-            # Replicate data to followers
+            
             followers = self.zkClient.getHostNameOfCacheFollowers(REGISTRATION_ZK_PATH)
-
-            logging.info("&&&&&&&&&&&&&&Update Followers********")
+            logging.info(f" **Replicate data to followers**")
             for follower, hostname in enumerate(followers):
                     response = requests.post(f'http://{hostname}:5000/data?key={key}&value={value}')
-                    response.raise_for_status()  # Raise an exception for HTTP errors
+                    response.raise_for_status()
  
     def retrieve(self, key):
 
