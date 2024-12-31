@@ -1,0 +1,55 @@
+version: "3"
+
+services:
+  zookeeper:
+    image: zookeeper
+    ports:
+      - "2181:2181"
+    restart: always
+
+    networks:
+      - cache
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.cacheNode
+    expose:
+      - "5000"
+    environment:
+      - ZOOKEEPER_HOST=zookeeper:2181
+    scale: 3
+
+    networks:
+      - cache
+    depends_on:
+      - zookeeper
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.cacheGateway
+    expose:
+      - 5005
+    environment:
+      - GATEWAY_PORT=5005
+      - ZOOKEEPER_HOST=zookeeper:2181
+      - HOSTNAME=localhost
+    networks:
+      - cache
+    scale: 4
+    depends_on:
+      - web
+
+  load-balancer:
+    image: nginx
+    volumes:
+      - ./reverse-proxy/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+    networks:
+      - cache
+    depends_on:
+     - gateway
+
+networks:
+  cache:
